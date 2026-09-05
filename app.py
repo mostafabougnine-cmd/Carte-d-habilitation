@@ -91,51 +91,52 @@ def draw_wrapped(c, text, x, y, width_chars=32, leading=18, size=12):
         c.drawString(x, yy, line)
         yy -= leading
 
-def generate_pdf_bytes(data, photo_bytes, bg_path):
+def generate_pdf_bytes(data, photo_bytes, bg_path, fonction_name):
     buffer = io.BytesIO()
     CARD_W, CARD_H = 1100, 550
     c = canvas.Canvas(buffer, pagesize=(CARD_W, CARD_H))
 
-    # 1. رسم صورة الخلفية الخاوية فقط
+    # 1. رسم الصورة الخلفية
     if os.path.exists(bg_path):
         c.drawImage(bg_path, 0, 0, width=CARD_W, height=CARD_H)
 
-    # 2. وضع صورة الشخص فـ المكان المخصص ليها بالضبط
-    px, py, pw, ph = 25, CARD_H - 330, 130, 160
+    # 2. إضافة صورة الشخص فـ الإطار الخاوي بالضبط
+    px, py, pw, ph = 85, CARD_H - 280, 105, 125
     if photo_bytes:
         try:
             c.drawImage(ImageReader(io.BytesIO(photo_bytes)), px, py, width=pw, height=ph, preserveAspectRatio=True)
         except Exception:
             pass
 
-    # 3. طباعة القيم فقط فوق الفراغات (بخط واضح وبلا إعادة رسم العناوين)
     c.setFont(FONT, 13)
     c.setFillColorRGB(0, 0, 0)
 
-    # Nom et Prénom
-    c.drawString(250, CARD_H - 150, data['nom'])
-    c.drawString(420, CARD_H - 150, data['prenom'])
+    # 3. كتابة المعلومات الشخصية فـ الأماكن الخاوية فقط
+    # Nom & Prénom
+    c.drawString(270, CARD_H - 180, data['nom'])
+    c.drawString(400, CARD_H - 180, data['prenom'])
 
     # Matricule
-    c.drawString(250, CARD_H - 185, data['matricule'])
+    c.drawString(270, CARD_H - 212, data['matricule'])
 
-    # Centre et Antenne
-    c.drawString(250, CARD_H - 220, data['centre'])
-    c.drawString(420, CARD_H - 220, data['antenne'])
+    # Centre & Antenne (إيلا ما كانوش مكتوبين فـ الخلفية)
+    if "CCFTC" not in fonction_name: 
+        c.drawString(270, CARD_H - 245, data['centre'])
+        c.drawString(450, CARD_H - 245, data['antenne'])
 
     # Dates
-    c.drawString(280, CARD_H - 255, data['date_aut'])
-    c.drawString(280, CARD_H - 290, data['date_prof'])
-    c.drawString(280, CARD_H - 325, data['date_med'])
-    c.drawString(280, CARD_H - 360, data['date_psy'])
+    c.drawString(270, CARD_H - 275, data['date_aut'])
+    c.drawString(270, CARD_H - 308, data['date_prof'])
+    c.drawString(270, CARD_H - 340, data['date_med'])
+    c.drawString(270, CARD_H - 372, data['date_psy'])
 
-    # Engins, Sites et Manœuvre (الجهة اليمنى)
-    draw_wrapped(c, data['engins'], 565, CARD_H - 110, width_chars=32, leading=20, size=12)
-    draw_wrapped(c, data['sites'], 860, CARD_H - 110, width_chars=18, leading=20, size=12)
-
-    if data['manoeuvre']:
-        c.setFont(FONT, 13)
-        c.drawCentredString(700, 230, data['manoeuvre'])
+    # 4. طباعة Engins / Sites فقط إيلا كان الإطار خاوي فـ صورة الوظيفة
+    # بالنسبة لـ Conducteur de Ligne و Conducteur de Manœuvre (الجهات الخاوية):
+    if fonction_name in ["Conducteur de Ligne", "Conducteur de Manœuvre"]:
+        if data['engins']:
+            draw_wrapped(c, data['engins'], 560, CARD_H - 140, width_chars=32, leading=20, size=12)
+        if data['sites'] and fonction_name == "Conducteur de Ligne":
+            draw_wrapped(c, data['sites'], 820, CARD_H - 140, width_chars=20, leading=20, size=12)
 
     c.save()
     buffer.seek(0)
@@ -161,23 +162,24 @@ with st.form("card_form"):
     st.subheader("2. Informations Personnelles")
     col1, col2 = st.columns(2)
     with col1:
-        nom = st.text_input("Nom", "AIT BAHALI")
-        matricule = st.text_input("Matricule", "47607A")
+        nom = st.text_input("Nom", "")
+        matricule = st.text_input("Matricule", "")
         centre = st.text_input("Centre", "CCFTC Kénitra")
     with col2:
-        prenom = st.text_input("Prénom", "BRAHIM")
+        prenom = st.text_input("Prénom", "")
         antenne = st.text_input("Antenne", "ACFTC Kénitra")
 
     st.subheader("3. Dates")
     col3, col4 = st.columns(2)
     with col3:
-        date_aut = st.text_input("Date d'autorisation", "01/03/2021")
-        date_med = st.text_input("Date examen médical", "02/03/2023")
+        date_aut = st.text_input("Date d'autorisation", "")
+        date_med = st.text_input("Date examen médical", "")
     with col4:
-        date_prof = st.text_input("Date examen professionnel", "02/09/2026")
-        date_psy = st.text_input("Date examen psychotechnique", "03/04/2024")
+        date_prof = st.text_input("Date examen professionnel", "")
+        date_psy = st.text_input("Date examen psychotechnique", "")
 
-    st.subheader("4. Données de la fonction (Auto-remplies)")
+    # إظهار الخانات للتعديل فقط للوظائف اللي محتاجة تعمير
+    st.subheader("4. Données de la fonction")
     engins = st.text_area("Engins autorisés", excel_data['engins'])
     sites = st.text_area("Sites / Lignes autorisés", excel_data['sites'])
     manoeuvre = st.text_input("Autorisé pour la Manœuvre du", excel_data['manoeuvre'])
@@ -195,7 +197,7 @@ if submit:
         'engins': engins, 'manoeuvre': manoeuvre, 'sites': sites
     }
 
-    pdf_data = generate_pdf_bytes(data, photo_bytes, config['bg_image'])
+    pdf_data = generate_pdf_bytes(data, photo_bytes, config['bg_image'], selected_fonction)
 
     st.success("Carte générée avec succès ! 🎉")
     st.download_button(
