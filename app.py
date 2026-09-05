@@ -18,6 +18,8 @@ CELL_MAPPING = {
     "date_prof": "F9",
     "date_med": "F10",
     "date_psy": "F11",
+    "materiel": "L4",  # Autorisé à conduire / arrêter les locos et rames
+    "lines_sites": "Q4", # Autorisé aux lignes / sites
     "photo_cell": "B5"
 }
 
@@ -29,19 +31,40 @@ TEMPLATES = {
     "CRMV (Conducteur de Manœuvre)": "CRMV.xlsx"
 }
 
+def safe_write_cell(ws, cell_address, value):
+    """يكتب في الخلية بأمان سواء كانت مدمجة أو عادية"""
+    cell = ws[cell_address]
+    if type(cell).__name__ == 'MergedCell':
+        # البحث عن الخلية الرئيسية في المدى المدمج
+        for rng in ws.merged_cells.ranges:
+            if cell_address in rng:
+                top_left_cell = ws.cell(row=rng.min_row, column=rng.min_col)
+                top_left_cell.value = value
+                break
+    else:
+        cell.value = value
+
 def generate_card(template_path, data, photo_bytes):
     wb = openpyxl.load_workbook(template_path)
     ws = wb.active
 
-    # تعبئة الخانات الفارغة فقط من دون المساس بالعبارات المسجلة سلفاً
-    for key, cell in CELL_MAPPING.items():
+    # تعبئة الخانات الفارغة فقط مع عدم المساس بالعبارات الموجودة سلفاً
+    for key, cell_address in CELL_MAPPING.items():
         if key in data and key != "photo_cell":
             user_value = data[key]
-            current_cell_value = ws[cell].value
+            current_cell = ws[cell_address]
+            current_value = current_cell.value
             
-            # الكتابة فقط إذا كانت الخانة فارغة أو تحتوي على مسافات فقط
-            if (current_cell_value is None or str(current_cell_value).strip() == "") and user_value and str(user_value).strip() != "":
-                ws[cell] = user_value
+            # إذا كانت الخانة مدمجة، نفحص قيمة الخلية الرئيسية
+            if type(current_cell).__name__ == 'MergedCell':
+                for rng in ws.merged_cells.ranges:
+                    if cell_address in rng:
+                        current_value = ws.cell(row=rng.min_row, column=rng.min_col).value
+                        break
+
+            # كتابة القيمة فقط إذا كانت الخانة خاوية تماماً في ملف Excel
+            if (current_value is None or str(current_value).strip() == "") and user_value and str(user_value).strip() != "":
+                safe_write_cell(ws, cell_address, user_value)
 
     # إضافة الصورة الشخصية
     if photo_bytes:
@@ -58,14 +81,14 @@ def generate_card(template_path, data, photo_bytes):
 
 st.title("🎴 Générateur de Cartes d'Habilitation")
 
-# اختيار نوع البطاقة
+# 1. اختيار نوع البطاقة
 selected_label = st.selectbox("Choisissez le modèle de carte :", list(TEMPLATES.keys()))
 template_filename = TEMPLATES[selected_label]
 
-# رفع الصورة الشخصية
+# 2. تحميل الصورة
 uploaded_photo = st.file_uploader("Photo d'identité (JPG / PNG)", type=["jpg", "jpeg", "png"])
 
-# استمارة إدخال البيانات
+# 3. استمارة البيانات
 with st.form("agent_form"):
     st.subheader("Informations de l'Agent")
     col1, col2 = st.columns(2)
@@ -75,11 +98,13 @@ with st.form("agent_form"):
         centre = st.text_input("Centre (laisser vide si déjà rempli)", "")
         date_aut = st.text_input("Date d'autorisation", "")
         date_med = st.text_input("Date examen médical", "")
+        materiel = st.text_input("Matériel / Locos / Rames (laisser vide si déjà rempli)", "")
     with col2:
         prenom = st.text_input("Prénom", "")
         antenne = st.text_input("Antenne (laisser vide si déjà rempli)", "")
         date_prof = st.text_input("Date examen professionnel", "")
         date_psy = st.text_input("Date examen psychotechnique", "")
+        lines_sites = st.text_input("Lignes / Sites autorisés (laisser vide si déjà rempli)", "")
 
     submit = st.form_submit_button("⚡ Générer la Carte")
 
@@ -94,7 +119,8 @@ if submit:
             'nom': nom, 'prenom': prenom, 'matricule': matricule,
             'centre': centre, 'antenne': antenne,
             'date_aut': date_aut, 'date_prof': date_prof,
-            'date_med': date_med, 'date_psy': date_psy
+            'date_med': date_med, 'date_psy': date_psy,
+            'materiel': materiel, 'lines_sites': lines_sites
         }
 
         try:
