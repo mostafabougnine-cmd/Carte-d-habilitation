@@ -12,12 +12,14 @@ st.set_page_config(page_title="Générateur Carte Habilitation ONCF", layout="ce
 
 def load_excel_data(file_path):
     if not os.path.exists(file_path):
-        return {"engins": "", "sites": "", "manoeuvre": ""}
+        return {"engins": "", "sites": "", "manoeuvre": "", "titre_engins": "Autorisé à conduire les locos et rames suivantes"}
     
     wb = openpyxl.load_workbook(file_path, data_only=True)
     ws = wb.active
     
     engins, sites, manoeuvre = "", "", ""
+    titre_engins = "Autorisé à conduire les locos et rames suivantes"
+    
     for r in range(1, ws.max_row + 1):
         for c in range(1, ws.max_column + 1):
             val = str(ws.cell(row=r, column=c).value or "").strip()
@@ -27,26 +29,21 @@ def load_excel_data(file_path):
                 sites = val
             elif "Matériel" in val:
                 manoeuvre = val
+            if "arrêter" in val.lower():
+                titre_engins = "Autorisé à arrêter les locos et rames suivantes"
                 
-    return {"engins": engins, "sites": sites, "manoeuvre": manoeuvre}
+    return {
+        "engins": engins, 
+        "sites": sites, 
+        "manoeuvre": manoeuvre,
+        "titre_engins": titre_engins
+    }
 
 FUNCTIONS_CONFIG = {
-    "Chef Formation Trains": {
-        "excel": "data/Cartes d'habilitation CFT.xlsx",
-        "bg_image": "photos/carte_cft.png"
-    },
-    "Chef de Train": {
-        "excel": "data/carte d'habilitation CTR.xlsx",
-        "bg_image": "photos/carte_ctr.png"
-    },
-    "Conducteur de Manœuvre": {
-        "excel": "data/carte d'habilitation CRMV.xlsx",
-        "bg_image": "photos/carte_crmv.png"
-    },
-    "Conducteur de Ligne": {
-        "excel": "data/carte d'habilitation CL.xlsx",
-        "bg_image": "photos/carte_cl.png"
-    }
+    "Chef Formation Trains": "data/Cartes d'habilitation CFT.xlsx",
+    "Chef de Train": "data/carte d'habilitation CTR.xlsx",
+    "Conducteur de Manœuvre": "data/carte d'habilitation CRMV.xlsx",
+    "Conducteur de Ligne": "data/carte d'habilitation CL.xlsx"
 }
 
 def register_font():
@@ -83,60 +80,102 @@ def wrap_text(text, max_chars):
         lines.append(current)
     return lines or [""]
 
-def draw_wrapped(c, text, x, y, width_chars=32, leading=18, size=12):
-    c.setFont(FONT, size)
-    lines = wrap_text(text, width_chars)
-    yy = y
-    for line in lines:
-        c.drawString(x, yy, line)
-        yy -= leading
-
-def generate_pdf_bytes(data, photo_bytes, bg_path, fonction_name):
+def generate_pdf_bytes(data, photo_bytes, excel_info):
     buffer = io.BytesIO()
-    CARD_W, CARD_H = 1100, 550
+    CARD_W, CARD_H = 1000, 500
     c = canvas.Canvas(buffer, pagesize=(CARD_W, CARD_H))
 
-    # 1. رسم الصورة الخلفية
-    if os.path.exists(bg_path):
-        c.drawImage(bg_path, 0, 0, width=CARD_W, height=CARD_H)
+    # 1. إطار الكارطة الخارجي
+    c.setLineWidth(3)
+    c.rect(10, 10, CARD_W - 20, CARD_H - 20)
 
-    # 2. إضافة صورة الشخص فـ الإطار الخاوي بالضبط
-    px, py, pw, ph = 85, CARD_H - 280, 105, 125
+    # 2. تقسيم الخطوط العمودية والأفقية
+    c.setLineWidth(1.5)
+    c.line(500, 10, 500, CARD_H - 10) # خط عمودي وسطاني
+    c.line(750, 120, 750, CARD_H - 10) # خط عمودي بين Engins و Sites
+
+    c.line(500, 120, CARD_W - 10, 120) # خط تنبيهات السفلي
+    if data['manoeuvre']:
+        c.line(500, 270, 750, 270) # خط الفاصل ديال Manœuvre
+
+    # 3. الهيدر (ONCF & Titre)
+    c.setFont(FONT, 18)
+    c.setFillColorRGB(0.85, 0.35, 0) # لون برتقالي
+    c.drawString(40, CARD_H - 45, "ONCF")
+    
+    c.setFont(FONT, 10)
+    c.setFillColorRGB(0, 0, 0)
+    c.drawString(30, CARD_H - 60, "PV/DTV/EPTCN")
+
+    c.setFont(FONT, 20)
+    c.drawString(200, CARD_H - 45, "Titre d'habilitation")
+    
+    c.setFont(FONT, 16)
+    c.setFillColorRGB(0.85, 0.35, 0)
+    c.drawString(200, CARD_H - 70, data['fonction'])
+
+    # 4. إطار صورة الشخص
+    px, py, pw, ph = 30, CARD_H - 250, 130, 160
+    c.rect(px, py, pw, ph)
     if photo_bytes:
         try:
-            c.drawImage(ImageReader(io.BytesIO(photo_bytes)), px, py, width=pw, height=ph, preserveAspectRatio=True)
+            c.drawImage(ImageReader(io.BytesIO(photo_bytes)), px + 2, py + 2, width=pw - 4, height=ph - 4, preserveAspectRatio=True)
         except Exception:
             pass
 
-    c.setFont(FONT, 13)
+    # 5. المعلومات الشخصية
     c.setFillColorRGB(0, 0, 0)
+    c.setFont(FONT, 12)
+    
+    labels_y = [
+        ("Nom :", data['nom'], CARD_H - 120),
+        ("Prénom :", data['prenom'], CARD_H - 145),
+        ("Matricule :", data['matricule'], CARD_H - 170),
+        ("Centre :", data['centre'], CARD_H - 195),
+        ("Antenne :", data['antenne'], CARD_H - 220),
+        ("Date d'autorisation :", data['date_aut'], CARD_H - 265),
+        ("Date de l'examen professionnel :", data['date_prof'], CARD_H - 295),
+        ("Date de l'examen médical :", data['date_med'], CARD_H - 325),
+        ("Date de l'examen psychotechnique :", data['date_psy'], CARD_H - 355),
+    ]
 
-    # 3. كتابة المعلومات الشخصية فـ الأماكن الخاوية فقط
-    # Nom & Prénom
-    c.drawString(270, CARD_H - 180, data['nom'])
-    c.drawString(400, CARD_H - 180, data['prenom'])
+    for label, val, y in labels_y:
+        c.setFont(FONT, 11)
+        c.drawString(180, y, label)
+        c.setFont(FONT, 11)
+        c.drawString(380, y, str(val))
 
-    # Matricule
-    c.drawString(270, CARD_H - 212, data['matricule'])
+    # 6. الجهة اليمنى (Engins, Sites, Manœuvre)
+    # Engins
+    c.setFont(FONT, 12)
+    c.drawCentredString(625, CARD_H - 40, excel_info['titre_engins'])
+    lines_engins = wrap_text(data['engins'], 30)
+    ey = CARD_H - 75
+    for l in lines_engins:
+        c.drawCentredString(625, ey, l)
+        ey -= 18
 
-    # Centre & Antenne (إيلا ما كانوش مكتوبين فـ الخلفية)
-    if "CCFTC" not in fonction_name: 
-        c.drawString(270, CARD_H - 245, data['centre'])
-        c.drawString(450, CARD_H - 245, data['antenne'])
+    # Manœuvre
+    if data['manoeuvre']:
+        c.setFont(FONT, 12)
+        c.drawCentredString(625, 240, "Autorisé pour la Manœuvre du")
+        c.drawCentredString(625, 180, data['manoeuvre'])
 
-    # Dates
-    c.drawString(270, CARD_H - 275, data['date_aut'])
-    c.drawString(270, CARD_H - 308, data['date_prof'])
-    c.drawString(270, CARD_H - 340, data['date_med'])
-    c.drawString(270, CARD_H - 372, data['date_psy'])
+    # Sites
+    c.setFont(FONT, 12)
+    c.drawCentredString(875, CARD_H - 40, "Autorisé aux sites / lignes suivants")
+    lines_sites = wrap_text(data['sites'], 22)
+    sy = CARD_H - 75
+    for l in lines_sites:
+        c.drawCentredString(875, sy, l)
+        sy -= 18
 
-    # 4. طباعة Engins / Sites فقط إيلا كان الإطار خاوي فـ صورة الوظيفة
-    # بالنسبة لـ Conducteur de Ligne و Conducteur de Manœuvre (الجهات الخاوية):
-    if fonction_name in ["Conducteur de Ligne", "Conducteur de Manœuvre"]:
-        if data['engins']:
-            draw_wrapped(c, data['engins'], 560, CARD_H - 140, width_chars=32, leading=20, size=12)
-        if data['sites'] and fonction_name == "Conducteur de Ligne":
-            draw_wrapped(c, data['sites'], 820, CARD_H - 140, width_chars=20, leading=20, size=12)
+    # 7. التنبيهات الحمراء الفتية
+    c.setFont(FONT, 9)
+    c.setFillColorRGB(0.8, 0, 0)
+    c.drawString(510, 95, "• Cette carte doit être présentée à tout contrôle;")
+    c.drawString(510, 75, "• Doit être restituée en cas de retrait temporaire ou définitif des fonctions de sécurité;")
+    c.drawString(510, 55, "• La fonction de sécurité à laquelle vous êtes habilité ne peut s'exercer qu'en pleine possession de vos facultés.")
 
     c.save()
     buffer.seek(0)
@@ -149,11 +188,8 @@ selected_fonction = st.selectbox(
     list(FUNCTIONS_CONFIG.keys())
 )
 
-config = FUNCTIONS_CONFIG[selected_fonction]
-excel_data = load_excel_data(config['excel'])
-
-if os.path.exists(config['bg_image']):
-    st.image(config['bg_image'], caption=f"Modèle: {selected_fonction}", use_container_width=True)
+excel_path = FUNCTIONS_CONFIG[selected_fonction]
+excel_data = load_excel_data(excel_path)
 
 with st.form("card_form"):
     st.subheader("1. Photo de l'Agent")
@@ -178,8 +214,7 @@ with st.form("card_form"):
         date_prof = st.text_input("Date examen professionnel", "")
         date_psy = st.text_input("Date examen psychotechnique", "")
 
-    # إظهار الخانات للتعديل فقط للوظائف اللي محتاجة تعمير
-    st.subheader("4. Données de la fonction")
+    st.subheader("4. Données de la fonction (Lues depuis Excel)")
     engins = st.text_area("Engins autorisés", excel_data['engins'])
     sites = st.text_area("Sites / Lignes autorisés", excel_data['sites'])
     manoeuvre = st.text_input("Autorisé pour la Manœuvre du", excel_data['manoeuvre'])
@@ -197,7 +232,7 @@ if submit:
         'engins': engins, 'manoeuvre': manoeuvre, 'sites': sites
     }
 
-    pdf_data = generate_pdf_bytes(data, photo_bytes, config['bg_image'], selected_fonction)
+    pdf_data = generate_pdf_bytes(data, photo_bytes, excel_data)
 
     st.success("Carte générée avec succès ! 🎉")
     st.download_button(
