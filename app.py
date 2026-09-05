@@ -7,20 +7,18 @@ from openpyxl.drawing.image import Image as XLImage
 
 st.set_page_config(page_title="Générateur de Cartes d'Habilitation - ONCF", layout="centered")
 
-# خريطة الخانات المطابقة للصورة تماماً
+# خريطة الخانات المضبوطة حسب هيكل Excel الأصلي
 CELL_MAPPING = {
-    "nom": "F6",
-    "prenom": "J6",
-    "matricule": "F7",
-    "centre": "F8",
-    "antenne": "J8",
-    "date_aut": "F9",
-    "date_prof": "F10",
-    "date_med": "F11",
-    "date_psy": "F12",
+    "nom": "F5",
+    "prenom": "J5",
+    "matricule": "F6",
+    "date_aut": "F8",
+    "date_prof": "F9",
+    "date_med": "F10",
+    "date_psy": "F11",
     "materiel": "L4",
     "lines_sites": "Q4",
-    "photo_cell": "B6"
+    "photo_cell": "B5"
 }
 
 TEMPLATES = {
@@ -31,28 +29,24 @@ TEMPLATES = {
 }
 
 def safe_write_cell(ws, cell_address, value):
-    """كتابة القيمة وتفريغ الخلية إذا كانت القيمة فارغة"""
+    """كتابة القيمة مع الحفاظ على الخلية المدمجة"""
     cell = ws[cell_address]
     target_cell = cell
     
-    # التعامل مع الخلايا المدمجة
     if type(cell).__name__ == 'MergedCell':
         for rng in ws.merged_cells.ranges:
             if cell_address in rng:
                 target_cell = ws.cell(row=rng.min_row, column=rng.min_col)
                 break
                 
-    # إذا كانت هناك قيمة مدخلة نكتبها، وإذا تركها المستخدم فارغة نفرغ الخلية القديمة
     if value and str(value).strip() != "":
         target_cell.value = value
-    else:
-        target_cell.value = None
 
 def generate_card(template_path, data, photo_bytes):
     wb = openpyxl.load_workbook(template_path)
     ws = wb.active
 
-    # كتابة أو تعديل الخانات
+    # تعبئة البيانات المتغيرة فقط (Centre و Antenne يبقيان تلقائياً من القالب)
     for key, cell_address in CELL_MAPPING.items():
         if key in data and key != "photo_cell":
             safe_write_cell(ws, cell_address, data[key])
@@ -79,20 +73,18 @@ template_filename = TEMPLATES[selected_label]
 # 2. تحميل الصورة
 uploaded_photo = st.file_uploader("Photo d'identité (JPG / PNG)", type=["jpg", "jpeg", "png"])
 
-# 3. استمارة البيانات
+# 3. استمارة البيانات (بدون Centre و Antenne لتظهر تلقائياً من القالب)
 with st.form("agent_form"):
     st.subheader("Informations de l'Agent")
     col1, col2 = st.columns(2)
     with col1:
         nom = st.text_input("Nom", "")
         matricule = st.text_input("Matricule", "")
-        centre = st.text_input("Centre", "")
         date_aut = st.text_input("Date d'autorisation", "")
         date_med = st.text_input("Date examen médical", "")
         materiel = st.text_input("Matériel / Locos / Rames", "")
     with col2:
         prenom = st.text_input("Prénom", "")
-        antenne = st.text_input("Antenne", "")
         date_prof = st.text_input("Date examen professionnel", "")
         date_psy = st.text_input("Date examen psychotechnique", "")
         lines_sites = st.text_input("Lignes / Sites autorisés", "")
@@ -108,7 +100,6 @@ if submit:
         photo_bytes = uploaded_photo.read() if uploaded_photo else None
         data = {
             'nom': nom, 'prenom': prenom, 'matricule': matricule,
-            'centre': centre, 'antenne': antenne,
             'date_aut': date_aut, 'date_prof': date_prof,
             'date_med': date_med, 'date_psy': date_psy,
             'materiel': materiel, 'lines_sites': lines_sites
