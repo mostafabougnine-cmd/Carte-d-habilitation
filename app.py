@@ -4,10 +4,10 @@ import io
 import streamlit as st
 import openpyxl
 from openpyxl.drawing.image import Image as XLImage
+from openpyxl.styles.borders import Border, Side
 
 st.set_page_config(page_title="Générateur de Cartes d'Habilitation - ONCF", layout="centered")
 
-# خريطة الخانات المطابقة لهيكل Excel الأصلي
 CELL_MAPPING = {
     "nom": "F5",
     "prenom": "J5",
@@ -28,15 +28,13 @@ TEMPLATES = {
     "CRMV (Conducteur de Manœuvre)": "CRMV.xlsx"
 }
 
-# القيم الافتراضية
 DEFAULT_MACHINES = "E1450 , E1400 ,E1250 ,DH400,Z2M"
 DEFAULT_SITE = "Site Voyageurs Kénitra"
 
 def get_valid_template_path(filename):
-    """البحث عن الملف في المجلد الرئيسي أو داخل مجلد data/"""
     paths_to_check = [
-        filename,                         # المجلد الرئيسي (Root)
-        os.path.join("data", filename)    # داخل مجلد data/
+        filename,
+        os.path.join("data", filename)
     ]
     for path in paths_to_check:
         if os.path.exists(path):
@@ -44,7 +42,6 @@ def get_valid_template_path(filename):
     return None
 
 def safe_write_cell(ws, cell_address, value):
-    """كتابة القيمة في الخلية العادية أو المدمجة مع الحفاظ على التنسيق الأصلي"""
     cell = ws[cell_address]
     target_cell = cell
     
@@ -57,11 +54,27 @@ def safe_write_cell(ws, cell_address, value):
     if value and str(value).strip() != "":
         target_cell.value = value
 
+def remove_inner_title_borders(ws):
+    """إزالة الحدود الداخلية في السطر الثاني لكي لا تظهر خطوط عرضية في العنوان المدمج"""
+    no_bottom = Side(border_style=None)
+    for col in range(12, 20):  # الأعمدة L إلى S
+        cell = ws.cell(row=2, column=col)
+        current_border = cell.border
+        cell.border = Border(
+            left=current_border.left,
+            right=current_border.right,
+            top=current_border.top,
+            bottom=no_bottom
+        )
+
 def generate_card(template_path, data, photo_bytes):
     wb = openpyxl.load_workbook(template_path)
     ws = wb.active
 
-    # تعبئة الخانات المتغيرة
+    # إزالة الخطوط الداخلية غير المرغوبة في رأس الجدول
+    remove_inner_title_borders(ws)
+
+    # تعبئة البيانات
     for key, cell_address in CELL_MAPPING.items():
         if key in data and key != "photo_cell":
             safe_write_cell(ws, cell_address, data[key])
@@ -81,11 +94,9 @@ def generate_card(template_path, data, photo_bytes):
 
 st.title("🎴 Générateur de Cartes d'Habilitation")
 
-# 1. اختيار نوع البطاقة
 selected_label = st.selectbox("Choisissez le modèle de carte :", list(TEMPLATES.keys()))
 template_filename = TEMPLATES[selected_label]
 
-# تعيين القيم الافتراضية بحسب اختيار نوع البطاقة
 default_materiel_val = ""
 default_sites_val = ""
 
@@ -95,10 +106,8 @@ if "CTR" in selected_label or "CFT" in selected_label:
 if "CRMV" in selected_label or "CFT" in selected_label:
     default_sites_val = DEFAULT_SITE
 
-# 2. تحميل الصورة
 uploaded_photo = st.file_uploader("Photo d'identité (JPG / PNG)", type=["jpg", "jpeg", "png"])
 
-# 3. استمارة البيانات
 with st.form("agent_form"):
     st.subheader("Informations de l'Agent")
     col1, col2 = st.columns(2)
