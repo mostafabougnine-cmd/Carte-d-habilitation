@@ -2,13 +2,54 @@
 import os
 import io
 import streamlit as st
-from PIL import Image
+import openpyxl
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase import pdfmetrics
 
 st.set_page_config(page_title="Générateur Carte Habilitation ONCF", layout="centered")
+
+# دالة لقراءة المعطيات مباشرة من ملفات Excel
+def load_excel_data(file_path):
+    if not os.path.exists(file_path):
+        return {"engins": "", "sites": "", "manoeuvre": ""}
+    
+    wb = openpyxl.load_workbook(file_path, data_only=True)
+    ws = wb.active
+    
+    engins, sites, manoeuvre = "", "", ""
+    for r in range(1, ws.max_row + 1):
+        for c in range(1, ws.max_column + 1):
+            val = str(ws.cell(row=r, column=c).value or "").strip()
+            if "E1450" in val or "DH" in val or "Z2M" in val:
+                engins = val
+            elif "Site" in val or "Lignes" in val or "Réseau" in val:
+                sites = val
+            elif "Matériel" in val:
+                manoeuvre = val
+                
+    return {"engins": engins, "sites": sites, "manoeuvre": manoeuvre}
+
+# ربط الوظائف بالملفات والتصاور
+FUNCTIONS_CONFIG = {
+    "Chef Formation Trains": {
+        "excel": "data/Cartes d'habilitation CFT.xlsx",
+        "bg_image": "photos/carte_cft.png"
+    },
+    "Chef de Train": {
+        "excel": "data/carte d'habilitation CTR.xlsx",
+        "bg_image": "photos/carte_ctr.png"
+    },
+    "Conducteur de Manœuvre": {
+        "excel": "data/carte d'habilitation CRMV.xlsx",
+        "bg_image": "photos/carte_crmv.png"
+    },
+    "Conducteur de Ligne": {
+        "excel": "data/carte d'habilitation CL.xlsx",
+        "bg_image": "photos/carte_cl.png"
+    }
+}
 
 def register_font():
     candidates = [
@@ -44,185 +85,121 @@ def wrap_text(text, max_chars):
         lines.append(current)
     return lines or [""]
 
-def draw_wrapped(c, text, x, y, width_chars=35, leading=20, size=13):
+def draw_wrapped(c, text, x, y, width_chars=30, leading=18, size=12):
     c.setFont(FONT, size)
     lines = wrap_text(text, width_chars)
     yy = y
     for line in lines:
         c.drawString(x, yy, line)
         yy -= leading
-    return yy
 
-def generate_pdf_bytes(data, photo_bytes, logo_bytes, tampon_bytes):
+def generate_pdf_bytes(data, photo_bytes, bg_path):
     buffer = io.BytesIO()
     CARD_W, CARD_H = 1100, 550
     c = canvas.Canvas(buffer, pagesize=(CARD_W, CARD_H))
 
-    # Cadre extérieur
-    c.setLineWidth(1.5)
-    c.rect(10, 10, CARD_W - 20, CARD_H - 20)
+    # 1. رسم الصورة الخلفية الخاصة بالوظيفة
+    if os.path.exists(bg_path):
+        c.drawImage(bg_path, 0, 0, width=CARD_W, height=CARD_H)
 
-    # Séparations
-    c.line(550, 10, 550, CARD_H - 10)
-    c.line(550, 360, CARD_W - 10, 360)
-    c.line(550, 170, CARD_W - 10, 170)
-    c.line(850, 170, 850, CARD_H - 10)
-
-    # Logo
-    if logo_bytes:
-        try:
-            c.drawImage(ImageReader(io.BytesIO(logo_bytes)), 25, CARD_H - 90, width=130, height=65, preserveAspectRatio=True, mask='auto')
-        except Exception:
-            c.setFont(FONT, 22)
-            c.drawString(30, CARD_H - 60, "ONCF")
-    else:
-        c.setFont(FONT, 22)
-        c.setFillColorRGB(0.85, 0.35, 0.1)
-        c.drawString(30, CARD_H - 60, "ONCF")
-        c.setFillColorRGB(0, 0, 0)
-
-    c.setFont(FONT, 11)
-    c.drawString(30, CARD_H - 110, "PV/DTV/EPTCN")
-
-    c.setFont(FONT, 28)
-    c.drawString(240, CARD_H - 60, "Titre d’habilitation")
-
-    c.setFont(FONT, 18)
-    c.setFillColorRGB(0.85, 0.35, 0.1)
-    c.drawString(260, CARD_H - 95, data['fonction'])
-    c.setFillColorRGB(0, 0, 0)
-
-    # Photo
+    # 2. إضافة صورة الشخص فوق المكان ديالها
     px, py, pw, ph = 25, CARD_H - 330, 130, 160
-    c.rect(px, py, pw, ph)
     if photo_bytes:
         try:
-            c.drawImage(ImageReader(io.BytesIO(photo_bytes)), px + 2, py + 2, width=pw - 4, height=ph - 4, preserveAspectRatio=True)
+            c.drawImage(ImageReader(io.BytesIO(photo_bytes)), px, py, width=pw, height=ph, preserveAspectRatio=True)
         except Exception:
             pass
 
-    # Infos Agent
-    lx, ly, gap = 170, CARD_H - 150, 35
-
+    # 3. الكتابة فوق الفراغات
     c.setFont(FONT, 14)
-    c.drawString(lx, ly, "Nom")
-    c.drawString(lx + 80, ly, ":  " + data['nom'])
-    c.drawString(lx + 230, ly, "Prénom  :  " + data['prenom'])
+    c.setFillColorRGB(0, 0, 0)
 
-    ly -= gap
-    c.drawString(lx, ly, "Matricule")
-    c.drawString(lx + 80, ly, ":  " + data['matricule'])
+    # Nom et Prénom
+    c.drawString(250, CARD_H - 150, data['nom'])
+    c.drawString(400, CARD_H - 150, data['prenom'])
 
-    ly -= gap
-    c.drawString(lx, ly, "Centre")
-    c.drawString(lx + 80, ly, ":  " + data['centre'])
-    c.drawString(lx + 230, ly, "Antenne : " + data['antenne'])
+    # Matricule
+    c.drawString(250, CARD_H - 185, data['matricule'])
 
-    ly -= gap
-    c.drawString(lx - 145, ly, "Date d’autorisation")
-    c.drawString(lx + 100, ly, ":  " + data['date_aut'])
+    # Centre et Antenne
+    c.drawString(250, CARD_H - 220, data['centre'])
+    c.drawString(400, CARD_H - 220, data['antenne'])
 
-    ly -= gap
-    c.drawString(lx - 145, ly, "Date de l’examen professionnel")
-    c.drawString(lx + 100, ly, ":  " + data['date_prof'])
+    # Dates
+    c.drawString(270, CARD_H - 255, data['date_aut'])
+    c.drawString(270, CARD_H - 290, data['date_prof'])
+    c.drawString(270, CARD_H - 325, data['date_med'])
+    c.drawString(270, CARD_H - 360, data['date_psy'])
 
-    ly -= gap
-    c.drawString(lx - 145, ly, "Date de l’examen médical")
-    c.drawString(lx + 100, ly, ":  " + data['date_med'])
-
-    ly -= gap
-    c.drawString(lx - 145, ly, "Date de l’examen psychotechniqu")
-    c.drawString(lx + 100, ly, ":  " + data['date_psy'])
-
-    # Tampon
-    if tampon_bytes:
-        try:
-            c.drawImage(ImageReader(io.BytesIO(tampon_bytes)), 360, 40, width=170, height=130, preserveAspectRatio=True, mask='auto')
-        except Exception:
-            pass
-
-    # Partie Droite
-    c.setFont(FONT, 15)
-    c.drawCentredString(700, CARD_H - 40, "Autorisé à arrêter les locos et rames")
-    c.drawCentredString(700, CARD_H - 60, "suivantes")
-    draw_wrapped(c, data['engins'], 565, CARD_H - 100, width_chars=35, leading=22, size=13)
-
-    c.setFont(FONT, 15)
-    c.drawCentredString(975, CARD_H - 40, "Autorisé aux sites suivants")
+    # Engins, Sites et Manœuvre (المقروءة من Excel)
+    draw_wrapped(c, data['engins'], 565, CARD_H - 100, width_chars=32, leading=20, size=13)
     draw_wrapped(c, data['sites'], 860, CARD_H - 110, width_chars=18, leading=20, size=13)
 
-    c.setFont(FONT, 15)
-    c.drawCentredString(700, 320, "Autorisé pour la Manœuvre du")
-    c.setFont(FONT, 14)
-    c.drawCentredString(700, 230, data['manoeuvre'])
-
-    # Red Texts
-    c.setFillColorRGB(0.9, 0, 0)
-    c.setFont(FONT, 9)
-    wy = 145
-    c.drawString(515, wy, "• Cette carte doit être présentée à tout contrôle ;")
-    c.drawString(515, wy - 20, "• Doit être restituée en cas de retrait temporaire ou définitif des fonctions de sécurité ;")
-    c.drawString(515, wy - 40, "• La fonction de sécurité à laquelle vous êtes habilité ne peut s’exercer qu’en pleine possession de vos")
-    c.drawString(515, wy - 52, "facultés et moyens.")
+    if data['manoeuvre']:
+        c.setFont(FONT, 14)
+        c.drawCentredString(700, 230, data['manoeuvre'])
 
     c.save()
     buffer.seek(0)
     return buffer.getvalue()
 
-st.title("🎴 Générateur Manuel de Carte ONCF")
+st.title("🎴 Générateur Carte Habilitation ONCF")
+
+# 1. اختار الوظيفة
+selected_fonction = st.selectbox(
+    "Choix de la Fonction",
+    list(FUNCTIONS_CONFIG.keys())
+)
+
+config = FUNCTIONS_CONFIG[selected_fonction]
+excel_data = load_excel_data(config['excel'])
+
+# المعاينة ديال صورة الكارطة
+if os.path.exists(config['bg_image']):
+    st.image(config['bg_image'], caption=f"Modèle: {selected_fonction}", use_container_width=True)
 
 with st.form("card_form"):
-    st.subheader("1. Informations de l'Agent")
+    st.subheader("1. Photo de l'Agent")
+    uploaded_photo = st.file_uploader("Photo d'identité (JPG / PNG)", type=["jpg", "jpeg", "png"])
+
+    st.subheader("2. Informations Personnelles")
     col1, col2 = st.columns(2)
     with col1:
-        nom = st.text_input("Nom", "OUGUI")
-        matricule = st.text_input("Matricule", "45892H")
+        nom = st.text_input("Nom", "")
+        matricule = st.text_input("Matricule", "")
         centre = st.text_input("Centre", "CCFTC Kénitra")
     with col2:
-        prenom = st.text_input("Prénom", "HAMZA")
-        fonction = st.text_input("Fonction (titre)", "Chef Formation Trains")
+        prenom = st.text_input("Prénom", "")
         antenne = st.text_input("Antenne", "ACFTC Kénitra")
 
-    st.subheader("2. Dates")
+    st.subheader("3. Dates")
     col3, col4 = st.columns(2)
     with col3:
-        date_aut = st.text_input("Date d'autorisation", "17/02/2022")
-        date_med = st.text_input("Date examen médical", "17/05/2022")
+        date_aut = st.text_input("Date d'autorisation", "")
+        date_med = st.text_input("Date examen médical", "")
     with col4:
-        date_prof = st.text_input("Date examen professionnel", "08/01/2026")
-        date_psy = st.text_input("Date examen psychotechnique", "05/08/2026")
+        date_prof = st.text_input("Date examen professionnel", "")
+        date_psy = st.text_input("Date examen psychotechnique", "")
 
-    st.subheader("3. Autorisations & Engins")
-    engins = st.text_area("Engins autorisés", "E1450 , E1400 , E1250 , Z2M , DH350, DH400 , DM600")
-    manoeuvre = st.text_input("Autorisé pour la Manœuvre du", "Matériel à Voyageurs")
-    sites = st.text_area("Sites autorisés", "Site Voyageurs Kénitra")
-
-    st.subheader("4. Images (Logo, Tampon, Photo)")
-    uploaded_photo = st.file_uploader("Photo d'identité (JPG / PNG)", type=["jpg", "jpeg", "png"])
-    uploaded_logo = st.file_uploader("Logo ONCF (Optionnel)", type=["png", "jpg"])
-    uploaded_tampon = st.file_uploader("Tampon / Signature (Optionnel)", type=["png", "jpg"])
+    st.subheader("4. Données de la fonction (Auto-remplies)")
+    engins = st.text_area("Engins autorisés", excel_data['engins'])
+    sites = st.text_area("Sites / Lignes autorisés", excel_data['sites'])
+    manoeuvre = st.text_input("Autorisé pour la Manœuvre du", excel_data['manoeuvre'])
 
     submit = st.form_submit_button("⚡ Générer la Carte PDF")
 
 if submit:
     photo_bytes = uploaded_photo.read() if uploaded_photo else None
-    
-    logo_bytes = uploaded_logo.read() if uploaded_logo else (
-        open("photos/oncf_logo.png", "rb").read() if os.path.exists("photos/oncf_logo.png") else None
-    )
-    tampon_bytes = uploaded_tampon.read() if uploaded_tampon else (
-        open("photos/tampon.png", "rb").read() if os.path.exists("photos/tampon.png") else None
-    )
 
     data = {
         'nom': nom, 'prenom': prenom, 'matricule': matricule,
-        'fonction': fonction, 'centre': centre, 'antenne': antenne,
+        'fonction': selected_fonction, 'centre': centre, 'antenne': antenne,
         'date_aut': date_aut, 'date_prof': date_prof,
         'date_med': date_med, 'date_psy': date_psy,
         'engins': engins, 'manoeuvre': manoeuvre, 'sites': sites
     }
 
-    pdf_data = generate_pdf_bytes(data, photo_bytes, logo_bytes, tampon_bytes)
+    pdf_data = generate_pdf_bytes(data, photo_bytes, config['bg_image'])
 
     st.success("Carte générée avec succès ! 🎉")
     st.download_button(
