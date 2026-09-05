@@ -28,7 +28,9 @@ TEMPLATES = {
     "CRMV (Conducteur de Manœuvre)": "CRMV.xlsx"
 }
 
-DEFAULT_MACHINES = "E1450 , E1400 ,E1250 ,DH400,Z2M"
+# الآلات الافتراضية لكل قالب
+CFT_MACHINES = "E1450 , E1400 ,E1250 ,Z2M, DH400, DM600"
+CTR_MACHINES = "E1450 , E1400 ,E1250 ,DH400,Z2M"
 DEFAULT_SITE = "Site Voyageurs Kénitra"
 
 def get_valid_template_path(filename):
@@ -57,7 +59,7 @@ def safe_write_cell(ws, cell_address, value):
 def remove_inner_title_borders(ws):
     """إزالة الحدود الداخلية في السطر الثاني لكي لا تظهر خطوط عرضية في العنوان المدمج"""
     no_bottom = Side(border_style=None)
-    for col in range(12, 20):  # الأعمدة L إلى S
+    for col in range(12, 20):
         cell = ws.cell(row=2, column=col)
         current_border = cell.border
         cell.border = Border(
@@ -97,11 +99,14 @@ st.title("🎴 Générateur de Cartes d'Habilitation")
 selected_label = st.selectbox("Choisissez le modèle de carte :", list(TEMPLATES.keys()))
 template_filename = TEMPLATES[selected_label]
 
+# تعيين القيم الافتراضية
 default_materiel_val = ""
 default_sites_val = ""
 
-if "CTR" in selected_label or "CFT" in selected_label:
-    default_materiel_val = DEFAULT_MACHINES
+if "CFT" in selected_label:
+    default_materiel_val = CFT_MACHINES
+elif "CTR" in selected_label:
+    default_materiel_val = CTR_MACHINES
 
 if "CRMV" in selected_label or "CFT" in selected_label:
     default_sites_val = DEFAULT_SITE
