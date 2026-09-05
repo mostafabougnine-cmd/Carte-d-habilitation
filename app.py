@@ -28,8 +28,9 @@ TEMPLATES = {
     "CRMV (Conducteur de Manœuvre)": "CRMV.xlsx"
 }
 
-# الآلات الافتراضية لـ CTR و CFT
+# القيم الافتراضية
 DEFAULT_MACHINES = "E1450 , E1400 ,E1250 ,DH400,Z2M"
+DEFAULT_SITE = "Site Voyageurs Kénitra"
 
 def get_valid_template_path(filename):
     """البحث عن الملف في المجلد الرئيسي أو داخل مجلد data/"""
@@ -60,7 +61,7 @@ def generate_card(template_path, data, photo_bytes):
     wb = openpyxl.load_workbook(template_path)
     ws = wb.active
 
-    # تعبئة الخانات المتغيرة (Centre و Antenne والـ Titres تظل ثابته من القالب الأصلي)
+    # تعبئة الخانات المتغيرة
     for key, cell_address in CELL_MAPPING.items():
         if key in data and key != "photo_cell":
             safe_write_cell(ws, cell_address, data[key])
@@ -84,10 +85,15 @@ st.title("🎴 Générateur de Cartes d'Habilitation")
 selected_label = st.selectbox("Choisissez le modèle de carte :", list(TEMPLATES.keys()))
 template_filename = TEMPLATES[selected_label]
 
-# تعيين القيمة الافتراضية للآلات حسب نوع البطاقة
+# تعيين القيم الافتراضية بحسب اختيار نوع البطاقة
 default_materiel_val = ""
+default_sites_val = ""
+
 if "CTR" in selected_label or "CFT" in selected_label:
     default_materiel_val = DEFAULT_MACHINES
+
+if "CRMV" in selected_label or "CFT" in selected_label:
+    default_sites_val = DEFAULT_SITE
 
 # 2. تحميل الصورة
 uploaded_photo = st.file_uploader("Photo d'identité (JPG / PNG)", type=["jpg", "jpeg", "png"])
@@ -106,7 +112,7 @@ with st.form("agent_form"):
         prenom = st.text_input("Prénom", "")
         date_prof = st.text_input("Date examen professionnel", "")
         date_psy = st.text_input("Date examen psychotechnique", "")
-        lines_sites = st.text_input("Lignes / Sites autorisés", "")
+        lines_sites = st.text_input("Lignes / Sites autorisés", value=default_sites_val)
 
     submit = st.form_submit_button("⚡ Générer la Carte")
 
