@@ -28,6 +28,9 @@ TEMPLATES = {
     "CRMV (Conducteur de Manœuvre)": "CRMV.xlsx"
 }
 
+# الآلات الافتراضية لـ CTR و CFT
+DEFAULT_MACHINES = "E1450 , E1400 ,E1250 ,DH400,Z2M"
+
 def get_valid_template_path(filename):
     """البحث عن الملف في المجلد الرئيسي أو داخل مجلد data/"""
     paths_to_check = [
@@ -81,6 +84,11 @@ st.title("🎴 Générateur de Cartes d'Habilitation")
 selected_label = st.selectbox("Choisissez le modèle de carte :", list(TEMPLATES.keys()))
 template_filename = TEMPLATES[selected_label]
 
+# تعيين القيمة الافتراضية للآلات حسب نوع البطاقة
+default_materiel_val = ""
+if "CTR" in selected_label or "CFT" in selected_label:
+    default_materiel_val = DEFAULT_MACHINES
+
 # 2. تحميل الصورة
 uploaded_photo = st.file_uploader("Photo d'identité (JPG / PNG)", type=["jpg", "jpeg", "png"])
 
@@ -93,7 +101,7 @@ with st.form("agent_form"):
         matricule = st.text_input("Matricule", "")
         date_aut = st.text_input("Date d'autorisation", "")
         date_med = st.text_input("Date examen médical", "")
-        materiel = st.text_input("Matériel / Locos / Rames", "")
+        materiel = st.text_input("Matériel / Locos / Rames", value=default_materiel_val)
     with col2:
         prenom = st.text_input("Prénom", "")
         date_prof = st.text_input("Date examen professionnel", "")
