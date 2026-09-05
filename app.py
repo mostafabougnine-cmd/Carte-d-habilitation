@@ -7,7 +7,7 @@ from openpyxl.drawing.image import Image as XLImage
 
 st.set_page_config(page_title="Générateur de Cartes d'Habilitation - ONCF", layout="centered")
 
-# خريطة الخانات الموحدة لجميع النماذج
+# خريطة الخانات الموحدة
 CELL_MAPPING = {
     "nom": "F5",
     "prenom": "J5",
@@ -21,7 +21,7 @@ CELL_MAPPING = {
     "photo_cell": "B5"
 }
 
-# قائمة الملفات والأسماء في مجلد data/
+# قائمة الملفات في مجلد data/
 TEMPLATES = {
     "CFT (Chef Formation Trains)": "CFT.xlsx",
     "CL (Conducteur de Ligne)": "CL.xlsx",
@@ -33,13 +33,13 @@ def generate_card(template_path, data, photo_bytes):
     wb = openpyxl.load_workbook(template_path)
     ws = wb.active
 
-    # تعبئة الخانات الفارغة فقط
+    # تعبئة الخانات الفارغة فقط من دون المساس بالعبارات المسجلة سلفاً
     for key, cell in CELL_MAPPING.items():
         if key in data and key != "photo_cell":
             user_value = data[key]
             current_cell_value = ws[cell].value
             
-            # شرط: يكتب المعلومة فقط إذا كانت الخانة في Excel فارغة تماماً وإذا كان المستخدم أدخل قيمة
+            # الكتابة فقط إذا كانت الخانة فارغة أو تحتوي على مسافات فقط
             if (current_cell_value is None or str(current_cell_value).strip() == "") and user_value and str(user_value).strip() != "":
                 ws[cell] = user_value
 
@@ -58,14 +58,14 @@ def generate_card(template_path, data, photo_bytes):
 
 st.title("🎴 Générateur de Cartes d'Habilitation")
 
-# 1. اختيار نوع البطاقة
+# اختيار نوع البطاقة
 selected_label = st.selectbox("Choisissez le modèle de carte :", list(TEMPLATES.keys()))
 template_filename = TEMPLATES[selected_label]
 
-# 2. تحميل الصورة
+# رفع الصورة الشخصية
 uploaded_photo = st.file_uploader("Photo d'identité (JPG / PNG)", type=["jpg", "jpeg", "png"])
 
-# 3. استمارة البيانات (يمكن ترك أي حقل فارغاً)
+# استمارة إدخال البيانات
 with st.form("agent_form"):
     st.subheader("Informations de l'Agent")
     col1, col2 = st.columns(2)
