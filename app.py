@@ -7,7 +7,7 @@ from openpyxl.drawing.image import Image as XLImage
 
 st.set_page_config(page_title="Générateur de Cartes d'Habilitation - ONCF", layout="centered")
 
-# خريطة الخانات المضبوطة حسب هيكل Excel الأصلي
+# خريطة الخانات المطابقة لهيكل Excel الأصلي
 CELL_MAPPING = {
     "nom": "F5",
     "prenom": "J5",
@@ -28,8 +28,19 @@ TEMPLATES = {
     "CRMV (Conducteur de Manœuvre)": "CRMV.xlsx"
 }
 
+def get_valid_template_path(filename):
+    """البحث عن الملف في المجلد الرئيسي أو داخل مجلد data/"""
+    paths_to_check = [
+        filename,                         # المجلد الرئيسي (Root)
+        os.path.join("data", filename)    # داخل مجلد data/
+    ]
+    for path in paths_to_check:
+        if os.path.exists(path):
+            return path
+    return None
+
 def safe_write_cell(ws, cell_address, value):
-    """كتابة القيمة مع الحفاظ على الخلية المدمجة"""
+    """كتابة القيمة في الخلية العادية أو المدمجة مع الحفاظ على التنسيق الأصلي"""
     cell = ws[cell_address]
     target_cell = cell
     
@@ -46,7 +57,7 @@ def generate_card(template_path, data, photo_bytes):
     wb = openpyxl.load_workbook(template_path)
     ws = wb.active
 
-    # تعبئة البيانات المتغيرة فقط (Centre و Antenne يبقيان تلقائياً من القالب)
+    # تعبئة الخانات المتغيرة (Centre و Antenne والـ Titres تظل ثابته من القالب الأصلي)
     for key, cell_address in CELL_MAPPING.items():
         if key in data and key != "photo_cell":
             safe_write_cell(ws, cell_address, data[key])
@@ -73,7 +84,7 @@ template_filename = TEMPLATES[selected_label]
 # 2. تحميل الصورة
 uploaded_photo = st.file_uploader("Photo d'identité (JPG / PNG)", type=["jpg", "jpeg", "png"])
 
-# 3. استمارة البيانات (بدون Centre و Antenne لتظهر تلقائياً من القالب)
+# 3. استمارة البيانات
 with st.form("agent_form"):
     st.subheader("Informations de l'Agent")
     col1, col2 = st.columns(2)
@@ -92,10 +103,10 @@ with st.form("agent_form"):
     submit = st.form_submit_button("⚡ Générer la Carte")
 
 if submit:
-    template_path = os.path.join("data", template_filename)
+    template_path = get_valid_template_path(template_filename)
 
-    if not os.path.exists(template_path):
-        st.error(f"⚠️ Fichier introuvable : '{template_path}'. Assurez-vous d'avoir placé le fichier dans le dossier 'data/'.")
+    if not template_path:
+        st.error(f"⚠️ Fichier introuvable : '{template_filename}'. Assurez-vous que le fichier est présent dans votre projet.")
     else:
         photo_bytes = uploaded_photo.read() if uploaded_photo else None
         data = {
