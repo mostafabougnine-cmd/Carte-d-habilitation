@@ -7,23 +7,22 @@ from openpyxl.drawing.image import Image as XLImage
 
 st.set_page_config(page_title="Générateur de Cartes d'Habilitation - ONCF", layout="centered")
 
-# خريطة الخانات الموحدة
+# خريطة الخانات المطابقة للصورة تماماً
 CELL_MAPPING = {
-    "nom": "F5",
-    "prenom": "J5",
-    "matricule": "F6",
-    "centre": "F7",
-    "antenne": "J7",
-    "date_aut": "F8",
-    "date_prof": "F9",
-    "date_med": "F10",
-    "date_psy": "F11",
-    "materiel": "L4",  # Autorisé à conduire / arrêter les locos et rames
-    "lines_sites": "Q4", # Autorisé aux lignes / sites
-    "photo_cell": "B5"
+    "nom": "F6",
+    "prenom": "J6",
+    "matricule": "F7",
+    "centre": "F8",
+    "antenne": "J8",
+    "date_aut": "F9",
+    "date_prof": "F10",
+    "date_med": "F11",
+    "date_psy": "F12",
+    "materiel": "L4",
+    "lines_sites": "Q4",
+    "photo_cell": "B6"
 }
 
-# قائمة الملفات في مجلد data/
 TEMPLATES = {
     "CFT (Chef Formation Trains)": "CFT.xlsx",
     "CL (Conducteur de Ligne)": "CL.xlsx",
@@ -32,39 +31,31 @@ TEMPLATES = {
 }
 
 def safe_write_cell(ws, cell_address, value):
-    """يكتب في الخلية بأمان سواء كانت مدمجة أو عادية"""
+    """كتابة القيمة وتفريغ الخلية إذا كانت القيمة فارغة"""
     cell = ws[cell_address]
+    target_cell = cell
+    
+    # التعامل مع الخلايا المدمجة
     if type(cell).__name__ == 'MergedCell':
-        # البحث عن الخلية الرئيسية في المدى المدمج
         for rng in ws.merged_cells.ranges:
             if cell_address in rng:
-                top_left_cell = ws.cell(row=rng.min_row, column=rng.min_col)
-                top_left_cell.value = value
+                target_cell = ws.cell(row=rng.min_row, column=rng.min_col)
                 break
+                
+    # إذا كانت هناك قيمة مدخلة نكتبها، وإذا تركها المستخدم فارغة نفرغ الخلية القديمة
+    if value and str(value).strip() != "":
+        target_cell.value = value
     else:
-        cell.value = value
+        target_cell.value = None
 
 def generate_card(template_path, data, photo_bytes):
     wb = openpyxl.load_workbook(template_path)
     ws = wb.active
 
-    # تعبئة الخانات الفارغة فقط مع عدم المساس بالعبارات الموجودة سلفاً
+    # كتابة أو تعديل الخانات
     for key, cell_address in CELL_MAPPING.items():
         if key in data and key != "photo_cell":
-            user_value = data[key]
-            current_cell = ws[cell_address]
-            current_value = current_cell.value
-            
-            # إذا كانت الخانة مدمجة، نفحص قيمة الخلية الرئيسية
-            if type(current_cell).__name__ == 'MergedCell':
-                for rng in ws.merged_cells.ranges:
-                    if cell_address in rng:
-                        current_value = ws.cell(row=rng.min_row, column=rng.min_col).value
-                        break
-
-            # كتابة القيمة فقط إذا كانت الخانة خاوية تماماً في ملف Excel
-            if (current_value is None or str(current_value).strip() == "") and user_value and str(user_value).strip() != "":
-                safe_write_cell(ws, cell_address, user_value)
+            safe_write_cell(ws, cell_address, data[key])
 
     # إضافة الصورة الشخصية
     if photo_bytes:
@@ -95,16 +86,16 @@ with st.form("agent_form"):
     with col1:
         nom = st.text_input("Nom", "")
         matricule = st.text_input("Matricule", "")
-        centre = st.text_input("Centre (laisser vide si déjà rempli)", "")
+        centre = st.text_input("Centre", "")
         date_aut = st.text_input("Date d'autorisation", "")
         date_med = st.text_input("Date examen médical", "")
-        materiel = st.text_input("Matériel / Locos / Rames (laisser vide si déjà rempli)", "")
+        materiel = st.text_input("Matériel / Locos / Rames", "")
     with col2:
         prenom = st.text_input("Prénom", "")
-        antenne = st.text_input("Antenne (laisser vide si déjà rempli)", "")
+        antenne = st.text_input("Antenne", "")
         date_prof = st.text_input("Date examen professionnel", "")
         date_psy = st.text_input("Date examen psychotechnique", "")
-        lines_sites = st.text_input("Lignes / Sites autorisés (laisser vide si déjà rempli)", "")
+        lines_sites = st.text_input("Lignes / Sites autorisés", "")
 
     submit = st.form_submit_button("⚡ Générer la Carte")
 
